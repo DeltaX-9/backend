@@ -1,0 +1,63 @@
+{
+    "mappings": {
+      "properties": {
+        "id": {
+            "type": "keyword"
+        },
+        "type": {
+            "type": "keyword"
+        },
+        "wallet":{
+            "type":"object",
+            "properties":{
+                "address":{
+                    "type":"text"
+                },
+                "chain_type":{
+                    "type":"keyword"
+                },
+                "forensic":{
+                  "type":"object",
+                  "properties":{
+                      "threat_level":{
+                          "type":"keyword"
+                      },
+                      "threat_score":{
+                          "type":"number"
+                      }
+                  }
+              }
+            }
+        },
+        "user":{
+            "type":"object",
+            "properties":{
+                "source_url":{
+                    "type":"keyword"
+                },
+                "user_identification":{
+                    "type":"text"
+                },
+                "summary":{
+                    "type":"text"
+                },
+                "records":{
+                    "type": "text"
+                },
+                "forensic":{
+                    "type":"object",
+                    "properties":{
+                        "threat_level":{
+                            "type":"keyword"
+                        },
+                        "threat_score":{
+                            "type":"number"
+                        }
+                    }
+            }
+            }
+        }
+      }
+    }
+  }
+  
