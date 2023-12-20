@@ -1,4 +1,5 @@
 from elasticsearch import Elasticsearch
+from elasticsearch_dsl import Search, query
 from elasticsearch_dsl import Search, Q
 
 import json
@@ -6,92 +7,104 @@ from flask import Flask, jsonify
 
 es = Elasticsearch("http://localhost:9200")
 
-def insert_data_into_es(index_name,data):
-    return es.index(index=index_name, body=data)
 
-def create_threat_actor(threat_actor):
-    index_name = "threat_actors"
-    
-    type = threat_actor["type"]
+class ThreatActorController:
+    def __init__(self):
+        self.index_name = "threat_actors"
 
-    if type == "address":
-        data = {
-            "id": f"{threat_actor['type']}_{threat_actor['address']}",
-            "wallet":{
-                "address": threat_actor["address"],
-                "chain": threat_actor["chain"],
-                "summary": threat_actor["summary"],
-                "records": threat_actor["records"],
-                "target_url": threat_actor["target_url"],
-                "transaction_id": threat_actor["transaction_id"],
-                "threat_level": threat_actor["threat_level"],
-                "threat_score": threat_actor["threat_score"],
-            }
-        }
-        res = insert_data_into_es(index_name, data)
+    def insert_data_into_es(self, index_name, data, id):
+        return es.update(index=index_name, id=id, body={"doc": data, "doc_as_upsert": True})
 
-        # Check if the indexing was successful
-        if res["result"] == "created":
-            return jsonify({"message": "Threat actor created successfully"}), 201
-        else:
-            return jsonify({"error": "Failed to create threat actor"}), 500
+    def create_threat_actor_on_es(self, data):
+        try:
+            threat_actor_id = data["id"]
 
-    elif type == "user":
-        data = {
-            "id": f"{threat_actor['type']}_{threat_actor['user_identification']}",
-            "user":{
-                "source_url": threat_actor["source_url"],
-                "user_identification": threat_actor["user_identification"],
-                "summary": threat_actor["summary"],
-                "records": threat_actor["records"],
-                "forensics": {
-                    "threat_level": threat_actor["threat_level"],
-                    "threat_score": threat_actor["threat_score"],
+            # Check if the threat actor already exists
+            existing_threat_actor = es.get(index=self.index_name, id=threat_actor_id, ignore=404)
+
+            if existing_threat_actor and existing_threat_actor["found"]:
+                # Threat actor exists, append the new activity
+                existing_activities = existing_threat_actor["_source"].get("activities", [])
+                new_activity = data.get("activities", [])
+
+                # Append the new activity to the existing activities
+                existing_activities.extend(new_activity)
+
+                # Update the existing document with the new activities
+                update_body = {
+                    "script": {
+                        "source": "ctx._source.activities = params.activities",
+                        "lang": "painless",
+                        "params": {"activities": existing_activities}
+                    }
                 }
-            }
-        }
-        res = insert_data_into_es(index_name, data)
 
-        # Check if the indexing was successful
-        if res["result"] == "created":
-            return jsonify({"message": "Threat actor created successfully"}), 201
-        else:
-            return jsonify({"error": "Failed to create threat actor"}), 500
+                # Perform the update by query
+                es.update_by_query(index=self.index_name, body={
+                    "query": {"term": {"id": threat_actor_id}},
+                    "script": update_body["script"]
+                })
 
-    else:
-        return jsonify({"error": "Invalid threat actor type"}), 400
+                return jsonify({"message": "Threat actor updated successfully"}), 200
+            else:
+                # Threat actor does not exist, create a new one
+                res = self.insert_data_into_es(self.index_name, data, threat_actor_id)
+                if res["result"] == "updated" or res["result"] == "created":
+                    return jsonify({"message": "Threat actor created successfully"}), 201
+                else:
+                    return jsonify({"error": "Failed to create threat actor"}), 500
 
-def find_by_address(address, index_name):
-    index_name = "threat_actors"
-    search_query = Search(using=es, index=index_name).query(
-        Q("match", wallet__address=address)
-    )
+        except Exception as e:
+            return jsonify({"error": f"Failed to create/update threat actor: {str(e)}"}), 500
+        
+    def search_all(self):
+        try:
+            # Create a Search object without specifying a query, which matches all documents
+            s = Search(using=es, index=self.index_name)
 
-    response = search_query.execute()
-    results_list = [hit.to_dict() for hit in response]
+            # Execute the search
+            result = s.execute()
 
-    # Return the results as a Flask response
-    return jsonify({"results": results_list})
+            documents_list = []
+            for hit in result.hits:
+                # Convert the entire hit (document) to a dictionary
+                document_dict = hit.to_dict()
 
-def find_all_threat_actors():
-    index_name = "threat_actors"
-    search_query = Search(using=es, index=index_name).query(
-        Q("match_all")
-    )
+                # Optionally, you may want to include the nested activities field separately
+                if "activities" in document_dict:
+                    document_dict["activities"] = [activity.to_dict() for activity in hit.activities]
 
-    response = search_query.execute()
-    results_list = [hit.to_dict() for hit in response]
+                documents_list.append(document_dict)
 
-    # Return the results as a Flask response
-    return jsonify({"results": results_list})
+            # Return the list of documents as JSON
+            return jsonify({"documents": documents_list})
+                    
+                    
+            
+        except Exception as e:  
+            return {"error": str(e)}
 
-def find_threat_actor_by_id(id):
-    index_name = "threat_actors"
-    res = es.search(index=index_name, body={
-        "query": {
-            "match": {
-                "id": id
-            }
-        }
-    })
-    return res
+    def search_anything(self,search_query):
+        try:
+            query = Q("nested", path="activities", query=Q("match", activities__content=search_query))
+
+            s = Search(using=es, index=self.index_name).query(query)
+            result = s.execute()
+
+            documents_list = []
+            for hit in result.hits:
+                # Convert the entire hit (document) to a dictionary
+                document_dict = hit.to_dict()
+
+                # Optionally, you may want to include the nested activities field separately
+                document_dict["activities"] = [activity.to_dict() for activity in hit.activities]
+
+                documents_list.append(document_dict)
+
+            # Return the list of documents as JSON
+            return jsonify({"documents": documents_list})
+            
+                    
+            
+        except Exception as e:  
+            return {"error": str(e)}

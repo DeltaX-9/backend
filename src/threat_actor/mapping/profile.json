@@ -1,0 +1,34 @@
+{
+  "properties": {
+    "id": {
+      "type": "keyword"
+    },
+    "name": {
+      "type": "keyword"
+    },
+    "aliases": {
+      "type": "keyword"
+    },
+    "other_names": {
+      "type": "keyword"
+    },
+    "is_active": {
+      "type": "boolean"
+    },
+    "type": {
+      "type": "keyword"
+    },
+    "threats_actors":{
+        "type": "keyword"
+    },
+    "description": {
+      "type": "text"
+    },
+    "references": {
+      "type": "keyword"
+    },
+    "tags": {
+      "type": "keyword"
+    }
+  }
+}

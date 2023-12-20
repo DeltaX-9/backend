@@ -1,0 +1,41 @@
+{
+    "mappings": {
+        "properties": {
+            "id": {
+                "type": "keyword"
+            },
+            "target_url": {
+                "type": "keyword"
+            },
+            "type": {
+                "type": "keyword"
+            },
+            "activities": {
+                "type": "nested",
+                "properties": {
+                    "forum": {
+                        "type": "keyword"
+                    },
+                    "category": {
+                        "type": "keyword"
+                    },
+                    "timestamp": {
+                        "type": "date"
+                    },
+                    "content": {
+                        "type": "text"
+                    }
+                }
+            },
+            "description": {
+                "type": "text"
+            },
+            "references": {
+                "type": "keyword"
+            },
+            "tags": {
+                "type": "keyword"
+            }
+        }
+    }
+}
